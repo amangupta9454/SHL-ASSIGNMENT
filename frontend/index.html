@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SHL Assessment Recommender</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #00C853;
+      --green-dim: #00C85322;
+      --green-glow: #00C85340;
+      --black: #080A0E;
+      --surface: #0E1117;
+      --surface-2: #141820;
+      --surface-3: #1C2230;
+      --border: #ffffff14;
+      --border-bright: #ffffff22;
+      --text: #E8ECF4;
+      --text-dim: #8892A4;
+      --text-dimmer: #4A5568;
+      --user-bubble: #1A2340;
+      --agent-bubble: #0E1117;
+      --accent: #4FC3F7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--black);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Noise overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ── */
+    header {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .logo {
+      font-family: 'DM Serif Display', serif;
+      font-size: 22px;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+
+    .logo span {
+      color: var(--green);
+    }
+
+    .header-badge {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--green);
+      border: 1px solid var(--green);
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--green-dim);
+    }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .api-url-input {
+      background: var(--surface-3);
+      border: 1px solid var(--border-bright);
+      border-radius: 8px;
+      padding: 7px 14px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      width: 260px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .api-url-input:focus { border-color: var(--green); color: var(--text); }
+
+    .api-key-input {
+      background: var(--surface-3);
+      border: 1px solid var(--border-bright);
+      border-radius: 8px;
+      padding: 7px 14px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      width: 200px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .api-key-input:focus { border-color: var(--green); color: var(--text); }
+
+    .reset-btn {
+      background: transparent;
+      border: 1px solid var(--border-bright);
+      border-radius: 8px;
+      padding: 7px 14px;
+      color: var(--text-dim);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .reset-btn:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── Layout ── */
+    .layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── Chat panel ── */
+    .chat-panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      scroll-behavior: smooth;
+    }
+
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+
+    .message {
+      display: flex;
+      gap: 14px;
+      max-width: 760px;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user { flex-direction: row-reverse; align-self: flex-end; }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .avatar.agent { background: var(--green-dim); border: 1px solid var(--green); color: var(--green); }
+    .avatar.user  { background: #1A2340; border: 1px solid #4FC3F722; color: var(--accent); }
+
+    .bubble {
+      padding: 14px 18px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.65;
+      max-width: 600px;
+    }
+
+    .message.agent .bubble {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-top-left-radius: 4px;
+      color: var(--text);
+    }
+
+    .message.user .bubble {
+      background: var(--user-bubble);
+      border: 1px solid #4FC3F714;
+      border-top-right-radius: 4px;
+      color: var(--text);
+    }
+
+    .typing-indicator {
+      display: flex;
+      gap: 5px;
+      padding: 6px 2px;
+      align-items: center;
+    }
+    .typing-indicator span {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.2s infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: .2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: .4s; }
+    @keyframes pulse {
+      0%, 60%, 100% { opacity: .3; transform: scale(.8); }
+      30% { opacity: 1; transform: scale(1); }
+    }
+
+    /* ── Input bar ── */
+    .input-bar {
+      padding: 20px 32px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    .input-wrap {
+      flex: 1;
+      background: var(--surface-3);
+      border: 1px solid var(--border-bright);
+      border-radius: 12px;
+      display: flex;
+      align-items: flex-end;
+      padding: 12px 16px;
+      transition: border-color .2s;
+    }
+    .input-wrap:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-glow); }
+
+    textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      resize: none;
+      max-height: 140px;
+      line-height: 1.6;
+    }
+    textarea::placeholder { color: var(--text-dimmer); }
+
+    .send-btn {
+      width: 42px; height: 42px;
+      border-radius: 10px;
+      background: var(--green);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all .2s;
+    }
+    .send-btn:hover { background: #00e060; transform: scale(1.05); }
+    .send-btn:disabled { background: var(--surface-3); cursor: not-allowed; transform: none; }
+    .send-btn svg { color: #000; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 22px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 16px;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .sidebar-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: .5px;
+    }
+
+    .recommendations-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .recommendations-list::-webkit-scrollbar { width: 3px; }
+    .recommendations-list::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
+
+    .rec-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all .2s;
+      animation: slideUp .3s ease;
+      text-decoration: none;
+    }
+    .rec-card:hover {
+      border-color: var(--green);
+      background: var(--surface-3);
+      transform: translateX(2px);
+    }
+
+    .rec-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1.35;
+    }
+
+    .rec-meta {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .rec-type-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .type-A { background: #1A3A2A; color: #4CAF50; border: 1px solid #4CAF5044; }
+    .type-P { background: #2A1A3A; color: #CE93D8; border: 1px solid #CE93D844; }
+    .type-K { background: #1A2A3A; color: #4FC3F7; border: 1px solid #4FC3F744; }
+    .type-B { background: #3A2A1A; color: #FFB74D; border: 1px solid #FFB74D44; }
+    .type-S { background: #3A1A1A; color: #EF9A9A; border: 1px solid #EF9A9A44; }
+
+    .rec-link {
+      font-size: 10px;
+      color: var(--green);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 8px;
+      opacity: 0.7;
+      transition: opacity .15s;
+    }
+    .rec-card:hover .rec-link { opacity: 1; }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 12px;
+      color: var(--text-dimmer);
+      padding: 32px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      font-size: 36px;
+      opacity: .4;
+    }
+
+    .empty-state p {
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    /* ── Welcome screen ── */
+    .welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 28px;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .welcome-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      background: var(--green-dim);
+      border: 1px solid var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+    }
+
+    .welcome h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 28px;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .welcome h2 em { color: var(--green); font-style: normal; }
+
+    .welcome p {
+      font-size: 14px;
+      color: var(--text-dim);
+      max-width: 420px;
+      line-height: 1.7;
+    }
+
+    .starter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      max-width: 500px;
+    }
+
+    .chip {
+      background: var(--surface-2);
+      border: 1px solid var(--border-bright);
+      border-radius: 20px;
+      padding: 8px 16px;
+      font-size: 12px;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .chip:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+
+    /* ── Turn counter ── */
+    .turn-counter {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-dimmer);
+      padding: 8px 32px 0;
+      flex-shrink: 0;
+    }
+
+    .turn-pips {
+      display: flex;
+      gap: 4px;
+    }
+
+    .pip {
+      width: 18px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--surface-3);
+      transition: background .3s;
+    }
+    .pip.active { background: var(--green); }
+    .pip.warn { background: #FFB74D; }
+
+    /* scrollbar */
+    .messages::-webkit-scrollbar-thumb:hover { background: var(--surface-2); }
+
+    /* type label mapping */
+    .type-label {
+      font-size: 10px;
+      color: var(--text-dimmer);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SHL<span>.</span></div>
+  <div class="header-badge">Assessment Recommender</div>
+  <div class="header-right">
+    <input class="api-url-input" id="apiUrl" type="text" placeholder="API URL (e.g. http://localhost:8000)" value="http://localhost:8000" />
+    <button class="reset-btn" onclick="resetConversation()">↺ New Chat</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Chat Panel -->
+  <div class="chat-panel">
+    <div class="messages" id="messages">
+      <!-- Welcome state -->
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">🎯</div>
+        <h2>Find the right<br/><em>SHL Assessment</em></h2>
+        <p>Tell me about the role you're hiring for — seniority, skills, or job title — and I'll recommend the best assessments from the SHL catalog.</p>
+        <div class="starter-chips">
+          <div class="chip" onclick="sendStarter('I am hiring a mid-level Java developer who works with stakeholders')">Java Developer</div>
+          <div class="chip" onclick="sendStarter('Looking for assessments for a senior sales manager role')">Sales Manager</div>
+          <div class="chip" onclick="sendStarter('I need tests for frontline customer service roles in a call center')">Customer Service</div>
+          <div class="chip" onclick="sendStarter('Hiring a data scientist with Python and ML skills')">Data Scientist</div>
+          <div class="chip" onclick="sendStarter('What assessments are good for leadership development?')">Leadership</div>
+          <div class="chip" onclick="sendStarter('I need to assess remote workers for self-motivation and reliability')">Remote Workers</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Turn counter -->
+    <div class="turn-counter" id="turnCounter" style="display:none">
+      <span>Turn</span>
+      <div class="turn-pips" id="pips"></div>
+      <span id="turnLabel">1 of 8</span>
+    </div>
+
+    <!-- Input bar -->
+    <div class="input-bar">
+      <div class="input-wrap">
+        <textarea
+          id="msgInput"
+          rows="1"
+          placeholder="Describe the role you're hiring for..."
+          onkeydown="handleKey(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+      </div>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Recommendations</div>
+      <div class="sidebar-sub" id="recCount">Awaiting context...</div>
+    </div>
+    <div class="recommendations-list" id="recList">
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>Recommendations will appear here once the agent has enough information about your role.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const TYPE_LABELS = {
+    A: 'Ability & Aptitude',
+    P: 'Personality & Behavior',
+    K: 'Knowledge & Skills',
+    B: 'Behavioral',
+    S: 'Simulation',
+  };
+
+  let conversationHistory = [];
+  let turn = 0;
+  let isLoading = false;
+
+  function getApiBase() {
+    return (document.getElementById('apiUrl').value || 'http://localhost:8000').replace(/\/$/, '');
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function sendStarter(text) {
+    document.getElementById('msgInput').value = text;
+    sendMessage();
+  }
+
+  function updateTurnCounter() {
+    const tc = document.getElementById('turnCounter');
+    const pips = document.getElementById('pips');
+    const label = document.getElementById('turnLabel');
+    const userTurns = conversationHistory.filter(m => m.role === 'user').length;
+
+    tc.style.display = userTurns > 0 ? 'flex' : 'none';
+
+    pips.innerHTML = '';
+    for (let i = 0; i < 8; i++) {
+      const pip = document.createElement('div');
+      pip.className = 'pip' + (i < userTurns ? (userTurns >= 6 ? ' warn' : ' active') : '');
+      pips.appendChild(pip);
+    }
+    label.textContent = `${userTurns} of 8`;
+  }
+
+  function appendMessage(role, content) {
+    const welcome = document.getElementById('welcome');
+    if (welcome) welcome.remove();
+
+    const container = document.getElementById('messages');
+    const msg = document.createElement('div');
+    msg.className = `message ${role}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = `avatar ${role === 'user' ? 'user' : 'agent'}`;
+    avatar.textContent = role === 'user' ? 'U' : 'S';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = content;
+
+    msg.appendChild(avatar);
+    msg.appendChild(bubble);
+    container.appendChild(msg);
+    container.scrollTop = container.scrollHeight;
+    return msg;
+  }
+
+  function showTyping() {
+    const welcome = document.getElementById('welcome');
+    if (welcome) welcome.remove();
+
+    const container = document.getElementById('messages');
+    const msg = document.createElement('div');
+    msg.className = 'message agent';
+    msg.id = 'typing';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar agent';
+    avatar.textContent = 'S';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+
+    msg.appendChild(avatar);
+    msg.appendChild(bubble);
+    container.appendChild(msg);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function removeTyping() {
+    const t = document.getElementById('typing');
+    if (t) t.remove();
+  }
+
+  function renderRecommendations(recs) {
+    const list = document.getElementById('recList');
+    const count = document.getElementById('recCount');
+
+    if (!recs || recs.length === 0) return;
+
+    count.textContent = `${recs.length} assessment${recs.length !== 1 ? 's' : ''} recommended`;
+
+    list.innerHTML = '';
+    recs.forEach((rec, i) => {
+      const card = document.createElement('a');
+      card.className = 'rec-card';
+      card.href = rec.url;
+      card.target = '_blank';
+      card.rel = 'noopener noreferrer';
+      card.style.animationDelay = `${i * 60}ms`;
+
+      const typeClass = `type-${rec.test_type}`;
+      const typeLabel = TYPE_LABELS[rec.test_type] || rec.test_type;
+
+      card.innerHTML = `
+        <div class="rec-name">${escHtml(rec.name)}</div>
+        <div class="rec-meta">
+          <span class="rec-type-badge ${typeClass}">${rec.test_type}</span>
+          <span class="type-label">${typeLabel}</span>
+        </div>
+        <div class="rec-link">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          View on SHL Catalog
+        </div>
+      `;
+      list.appendChild(card);
+    });
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function sendMessage() {
+    if (isLoading) return;
+    const input = document.getElementById('msgInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const userTurns = conversationHistory.filter(m => m.role === 'user').length;
+    if (userTurns >= 8) {
+      appendMessage('agent', 'This conversation has reached the 8-turn limit. Please start a new chat.');
+      return;
+    }
+
+    input.value = '';
+    input.style.height = 'auto';
+
+    conversationHistory.push({ role: 'user', content: text });
+    appendMessage('user', text);
+    updateTurnCounter();
+
+    isLoading = true;
+    document.getElementById('sendBtn').disabled = true;
+    showTyping();
+
+    try {
+      const resp = await fetch(`${getApiBase()}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: conversationHistory }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.text();
+        throw new Error(`Server error ${resp.status}: ${err}`);
+      }
+
+      const data = await resp.json();
+      removeTyping();
+
+      conversationHistory.push({ role: 'assistant', content: data.reply });
+      appendMessage('agent', data.reply);
+      renderRecommendations(data.recommendations);
+
+      if (data.end_of_conversation) {
+        setTimeout(() => appendMessage('agent', '✅ Conversation complete. Feel free to start a new chat if you need more help!'), 500);
+        document.getElementById('sendBtn').disabled = true;
+        input.disabled = true;
+        input.placeholder = 'Conversation ended. Click ↺ New Chat to start over.';
+      }
+    } catch (err) {
+      removeTyping();
+      appendMessage('agent', `⚠️ Error: ${err.message}. Please check your API URL and try again.`);
+    } finally {
+      isLoading = false;
+      if (!document.getElementById('msgInput').disabled) {
+        document.getElementById('sendBtn').disabled = false;
+      }
+    }
+  }
+
+  function resetConversation() {
+    conversationHistory = [];
+    turn = 0;
+    const messages = document.getElementById('messages');
+    messages.innerHTML = `
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">🎯</div>
+        <h2>Find the right<br/><em>SHL Assessment</em></h2>
+        <p>Tell me about the role you're hiring for — seniority, skills, or job title — and I'll recommend the best assessments from the SHL catalog.</p>
+        <div class="starter-chips">
+          <div class="chip" onclick="sendStarter('I am hiring a mid-level Java developer who works with stakeholders')">Java Developer</div>
+          <div class="chip" onclick="sendStarter('Looking for assessments for a senior sales manager role')">Sales Manager</div>
+          <div class="chip" onclick="sendStarter('I need tests for frontline customer service roles in a call center')">Customer Service</div>
+          <div class="chip" onclick="sendStarter('Hiring a data scientist with Python and ML skills')">Data Scientist</div>
+          <div class="chip" onclick="sendStarter('What assessments are good for leadership development?')">Leadership</div>
+          <div class="chip" onclick="sendStarter('I need to assess remote workers for self-motivation and reliability')">Remote Workers</div>
+        </div>
+      </div>`;
+
+    document.getElementById('recList').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>Recommendations will appear here once the agent has enough information about your role.</p>
+      </div>`;
+    document.getElementById('recCount').textContent = 'Awaiting context...';
+    document.getElementById('turnCounter').style.display = 'none';
+
+    const input = document.getElementById('msgInput');
+    input.disabled = false;
+    input.placeholder = 'Describe the role you\'re hiring for...';
+    input.value = '';
+    document.getElementById('sendBtn').disabled = false;
+  }
+</script>
+</body>
+</html>
