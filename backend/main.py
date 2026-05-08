@@ -43,7 +43,7 @@ if frontend_path.exists():
 
 # ─────────────────────────── Load Catalog ────────────────────────
 
-CATALOG_PATH = Path(__file__).parent.parent / "data" / "catalog.json"
+CATALOG_PATH = Path(__file__).parent / "data" / "catalog.json"
 
 with open(CATALOG_PATH, encoding="utf-8") as f:
     CATALOG: list[dict] = json.load(f)
