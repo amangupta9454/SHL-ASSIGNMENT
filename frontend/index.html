@@ -504,7 +504,7 @@
   <div class="logo">SHL<span>.</span></div>
   <div class="header-badge">Assessment Recommender</div>
   <div class="header-right">
-    <input class="api-url-input" id="apiUrl" type="text" placeholder="API URL (e.g. http://localhost:8000)" value="http://localhost:8000" />
+    <input class="api-url-input" id="apiUrl" type="text" placeholder="API URL (e.g. http://localhost:8000)" value="" />
     <button class="reset-btn" onclick="resetConversation()">↺ New Chat</button>
   </div>
 </header>
@@ -587,7 +587,11 @@
   let isLoading = false;
 
   function getApiBase() {
-    return (document.getElementById('apiUrl').value || 'http://localhost:8000').replace(/\/$/, '');
+    const val = document.getElementById('apiUrl').value;
+    if (val) {
+      return val.replace(/\/$/, '');
+    }
+    return window.location.origin;
   }
 
   function autoResize(el) {
