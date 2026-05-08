@@ -742,7 +742,7 @@
     showTyping();
 
     try {
-      const resp = await fetch(`${getApiBase()}/chat`, {
+      const resp = await fetch(`${getApiBase()}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: conversationHistory }),

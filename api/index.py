@@ -36,10 +36,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-frontend_path = Path(__file__).parent.parent / "frontend"
-if frontend_path.exists():
-    app.mount("/frontend", StaticFiles(directory=frontend_path), name="frontend")
-
 
 # ─────────────────────────── Load Catalog ────────────────────────
 
@@ -207,23 +203,12 @@ def parse_agent_response(raw: str) -> dict:
 
 # ─────────────────────────── Endpoints ───────────────────────────
 
-@app.get("/")
-async def root():
-    if frontend_path.exists():
-        return FileResponse(frontend_path / "index.html")
-    return {"message": "SHL Assessment Recommender API is running"}
-
-@app.get("/favicon.ico")
-async def favicon():
-    # Ignore favicon requests to prevent 404s in logs if not present
-    return {"status": "ok"}
-
-@app.get("/health")
+@app.get("/api/health")
 async def health():
     return {"status": "ok"}
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     if not request.messages:
         raise HTTPException(status_code=400, detail="messages cannot be empty")
